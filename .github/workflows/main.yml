@@ -5,32 +5,56 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
+    name: Build and Test
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+
+      - name: Verify repository files
+        run: |
+          pwd
+          ls -la
+          echo "Checking required files..."
+          test -f app.py || (echo "ERROR: app.py not found in repository root" && exit 1)
+          test -f requirements.txt || (echo "ERROR: requirements.txt not found" && exit 1)
+          test -f tests/test_app.py || (echo "ERROR: tests/test_app.py not found" && exit 1)
+          echo "Required files found."
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
 
       - name: Check Python syntax
         run: python -m compileall -q app.py tests
 
+      - name: Diagnose app import
+        run: |
+          python -c "import os, sys; print('Working directory:', os.getcwd()); print('Python path:', sys.path); import app; print('Imported app from:', app.__file__)"
+        env:
+          PYTHONPATH: .
+
       - name: Run automated tests
-        run: pytest -q
+        run: python -m pytest -q
+        env:
+          PYTHONPATH: .
 
       - name: Build Docker image
         run: docker build -t aceest-fitness .
 
-      - name: Test inside Docker
+      - name: Test inside Docker container
         run: docker run --rm aceest-fitness pytest -q
